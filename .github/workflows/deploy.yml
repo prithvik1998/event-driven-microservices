@@ -118,9 +118,9 @@ jobs:
     - name: Install Kafka and Schema Registry
       run: |
         helm repo add bitnami https://charts.bitnami.com/bitnami
-        # First uninstall any existing releases with these names
-        helm uninstall my-release --ignore-not-found
-        helm uninstall schema --ignore-not-found
+        # First try to uninstall any existing releases
+        helm uninstall my-release 2>/dev/null || true
+        helm uninstall schema 2>/dev/null || true
         # Then install with zookeeper enabled
         helm install my-release bitnami/kafka \
           --version 18.5.0 \
