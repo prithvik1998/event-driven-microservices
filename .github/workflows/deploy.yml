@@ -1,0 +1,126 @@
+name: Deploy Food Ordering System
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:  # Allows manual triggering
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Set up JDK
+      uses: actions/setup-java@v3
+      with:
+        java-version: '17'
+        distribution: 'adopt'
+        
+    - name: Build with Maven
+      run: mvn clean install -DskipTests
+      
+    - name: Configure AWS credentials
+      uses: aws/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+        
+    - name: Setup kubectl
+      uses: azure/setup-kubectl@v3
+      
+    - name: Create EKS cluster
+      run: |
+        eksctl get cluster --name food-ordering-cluster || \
+        eksctl create cluster \
+          --name food-ordering-cluster \
+          --region us-east-1 \
+          --nodegroup-name standard-workers \
+          --node-type t3.medium \
+          --nodes 3
+          
+    - name: Setup kubectl for EKS
+      run: aws eks update-kubeconfig --name food-ordering-cluster --region us-east-1
+      
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws/amazon-ecr-login@v1
+      
+    - name: Create ECR repositories
+      run: |
+        for service in order-service payment-service restaurant-service customer-service; do
+          aws ecr describe-repositories --repository-names $service || aws ecr create-repository --repository-name $service
+        done
+      
+    - name: Build and push Docker images
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+      run: |
+        # Build and push each service
+        for service in order-service payment-service restaurant-service customer-service; do
+          echo "Building $service..."
+          docker build -t $ECR_REGISTRY/$service:latest ./$service
+          docker push $ECR_REGISTRY/$service:latest
+        done
+        
+    - name: Create modified deployment file
+      run: |
+        cp ./infrastructure/k8s/application-deployment-local.yml ./application-deployment-cloud.yml
+        
+        # Update image references in deployment file
+        ECR_REGISTRY=${{ steps.login-ecr.outputs.registry }}
+        sed -i "s|image: com.food.ordering.system/order.service:1.0-SNAPSHOT|image: $ECR_REGISTRY/order-service:latest|g" ./application-deployment-cloud.yml
+        sed -i "s|image: com.food.ordering.system/payment.service:1.0-SNAPSHOT|image: $ECR_REGISTRY/payment-service:latest|g" ./application-deployment-cloud.yml
+        sed -i "s|image: com.food.ordering.system/restaurant.service:1.0-SNAPSHOT|image: $ECR_REGISTRY/restaurant-service:latest|g" ./application-deployment-cloud.yml
+        sed -i "s|image: com.food.ordering.system/customer.service:1.0-SNAPSHOT|image: $ECR_REGISTRY/customer-service:latest|g" ./application-deployment-cloud.yml
+        
+    - name: Setup Helm
+      uses: azure/setup-helm@v3
+        
+    - name: Install Kafka and Schema Registry
+      run: |
+        helm repo add my-repo https://charts.bitnami.com/bitnami
+        helm upgrade --install my-release my-repo/kafka
+        helm upgrade --install schema my-repo/schema-registry
+        
+    - name: Deploy Postgres
+      run: kubectl apply -f ./infrastructure/k8s/postgres-deployment.yml
+        
+    - name: Create Kafka topics
+      run: |
+        cat <<EOF > kafka-topics-job.yml
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: kafka-topics-setup
+        spec:
+          ttlSecondsAfterFinished: 100
+          template:
+            spec:
+              containers:
+              - name: kafka-client
+                image: bitnami/kafka:latest
+                command:
+                - "/bin/bash"
+                - "-c"
+                - |
+                  kafka-topics.sh --bootstrap-server my-release-kafka:9092 --create --if-not-exists --topic payment-request --replication-factor 1 --partitions 3
+                  kafka-topics.sh --bootstrap-server my-release-kafka:9092 --create --if-not-exists --topic payment-response --replication-factor 1 --partitions 3
+                  kafka-topics.sh --bootstrap-server my-release-kafka:9092 --create --if-not-exists --topic restaurant-approval-request --replication-factor 1 --partitions 3
+                  kafka-topics.sh --bootstrap-server my-release-kafka:9092 --create --if-not-exists --topic restaurant-approval-response --replication-factor 1 --partitions 3
+                  kafka-topics.sh --bootstrap-server my-release-kafka:9092 --create --if-not-exists --topic customer --replication-factor 1 --partitions 3
+              restartPolicy: Never
+          backoffLimit: 4
+        EOF
+        kubectl apply -f kafka-topics-job.yml
+        
+    - name: Deploy microservices
+      run: kubectl apply -f ./application-deployment-cloud.yml
+        
+    - name: Get service endpoints
+      run: |
+        echo "Service endpoints:"
+        kubectl get svc
