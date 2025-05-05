@@ -68,25 +68,33 @@ jobs:
         # (these are the ones that have Spring Boot applications with main classes)
         echo "Building order-service Docker image..."
         cd order-service/order-container
-        mvn spring-boot:build-image -DskipTests -Dspring-boot.build-image.imageName=$ECR_REGISTRY/order-service:latest
+        mvn spring-boot:build-image -DskipTests
+        # Tag the image with the ECR repository name
+        docker tag com.food.ordering.system/order.service:1.0-SNAPSHOT $ECR_REGISTRY/order-service:latest
         docker push $ECR_REGISTRY/order-service:latest
         cd ../..
         
         echo "Building payment-service Docker image..."
         cd payment-service/payment-container
-        mvn spring-boot:build-image -DskipTests -Dspring-boot.build-image.imageName=$ECR_REGISTRY/payment-service:latest
+        mvn spring-boot:build-image -DskipTests
+        # Tag the image with the ECR repository name
+        docker tag com.food.ordering.system/payment.service:1.0-SNAPSHOT $ECR_REGISTRY/payment-service:latest
         docker push $ECR_REGISTRY/payment-service:latest
         cd ../..
         
         echo "Building restaurant-service Docker image..."
         cd restaurant-service/restaurant-container
-        mvn spring-boot:build-image -DskipTests -Dspring-boot.build-image.imageName=$ECR_REGISTRY/restaurant-service:latest
+        mvn spring-boot:build-image -DskipTests
+        # Tag the image with the ECR repository name
+        docker tag com.food.ordering.system/restaurant.service:1.0-SNAPSHOT $ECR_REGISTRY/restaurant-service:latest
         docker push $ECR_REGISTRY/restaurant-service:latest
         cd ../..
         
         echo "Building customer-service Docker image..."
         cd customer-service/customer-container
-        mvn spring-boot:build-image -DskipTests -Dspring-boot.build-image.imageName=$ECR_REGISTRY/customer-service:latest
+        mvn spring-boot:build-image -DskipTests
+        # Tag the image with the ECR repository name
+        docker tag com.food.ordering.system/customer.service:1.0-SNAPSHOT $ECR_REGISTRY/customer-service:latest
         docker push $ECR_REGISTRY/customer-service:latest
         cd ../..
         
