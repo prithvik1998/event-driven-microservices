@@ -109,6 +109,9 @@ jobs:
         sed -i "s|image: com.food.ordering.system/restaurant.service:1.0-SNAPSHOT|image: $ECR_REGISTRY/restaurant-service:latest|g" ./application-deployment-cloud.yml
         sed -i "s|image: com.food.ordering.system/customer.service:1.0-SNAPSHOT|image: $ECR_REGISTRY/customer-service:latest|g" ./application-deployment-cloud.yml
         
+        # Fix Kafka bootstrap server URL (remove http:// prefix if present)
+        sed -i 's|value: "http://my-release-kafka:9092"|value: "my-release-kafka:9092"|g' ./application-deployment-cloud.yml
+        
     - name: Setup Helm
       uses: azure/setup-helm@v3
         
