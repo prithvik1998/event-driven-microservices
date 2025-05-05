@@ -64,22 +64,31 @@ jobs:
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
       run: |
-        # Build each service image using Maven
-        for service in order-service payment-service restaurant-service customer-service; do
-          echo "Building $service..."
-          
-          # Go to the service directory
-          cd $service
-          
-          # Use Maven to build the Docker image
-          mvn spring-boot:build-image -DskipTests -Dspring-boot.build-image.imageName=$ECR_REGISTRY/$service:latest
-          
-          # Tag and push the image to ECR
-          docker push $ECR_REGISTRY/$service:latest
-          
-          # Go back to the project root
-          cd ..
-        done
+        # Only build Docker images for the container modules
+        # (these are the ones that have Spring Boot applications with main classes)
+        echo "Building order-service Docker image..."
+        cd order-service/order-container
+        mvn spring-boot:build-image -DskipTests -Dspring-boot.build-image.imageName=$ECR_REGISTRY/order-service:latest
+        docker push $ECR_REGISTRY/order-service:latest
+        cd ../..
+        
+        echo "Building payment-service Docker image..."
+        cd payment-service/payment-container
+        mvn spring-boot:build-image -DskipTests -Dspring-boot.build-image.imageName=$ECR_REGISTRY/payment-service:latest
+        docker push $ECR_REGISTRY/payment-service:latest
+        cd ../..
+        
+        echo "Building restaurant-service Docker image..."
+        cd restaurant-service/restaurant-container
+        mvn spring-boot:build-image -DskipTests -Dspring-boot.build-image.imageName=$ECR_REGISTRY/restaurant-service:latest
+        docker push $ECR_REGISTRY/restaurant-service:latest
+        cd ../..
+        
+        echo "Building customer-service Docker image..."
+        cd customer-service/customer-container
+        mvn spring-boot:build-image -DskipTests -Dspring-boot.build-image.imageName=$ECR_REGISTRY/customer-service:latest
+        docker push $ECR_REGISTRY/customer-service:latest
+        cd ../..
         
     - name: Create modified deployment file
       run: |
@@ -127,8 +136,8 @@ jobs:
                   kafka-topics.sh --bootstrap-server my-release-kafka:9092 --create --if-not-exists --topic restaurant-approval-request --replication-factor 1 --partitions 3
                   kafka-topics.sh --bootstrap-server my-release-kafka:9092 --create --if-not-exists --topic restaurant-approval-response --replication-factor 1 --partitions 3
                   kafka-topics.sh --bootstrap-server my-release-kafka:9092 --create --if-not-exists --topic customer --replication-factor 1 --partitions 3
-                restartPolicy: Never
-              backoffLimit: 4
+              restartPolicy: Never
+          backoffLimit: 4
         EOF
         kubectl apply -f kafka-topics-job.yml
         
