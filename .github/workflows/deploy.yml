@@ -121,44 +121,26 @@ jobs:
         helm uninstall schema 2>/dev/null || true
         kubectl delete pvc --all 2>/dev/null || true
         
-    - name: Create EBS Storage Class
-      run: |
-        kubectl apply -f - <<EOF
-        apiVersion: storage.k8s.io/v1
-        kind: StorageClass
-        metadata:
-          name: ebs-sc
-        provisioner: kubernetes.io/aws-ebs
-        parameters:
-          type: gp2
-          fsType: ext4
-        reclaimPolicy: Delete
-        allowVolumeExpansion: true
-        volumeBindingMode: WaitForFirstConsumer
-        EOF
-        
-    - name: Install Kafka with proper storage and resource settings
+    - name: Install Kafka with proper settings
       run: |
         helm repo add bitnami https://charts.bitnami.com/bitnami
         helm install my-release bitnami/kafka \
           --version 18.5.0 \
-          --set zookeeper.enabled=true \
+          --set persistence.enabled=false \
+          --set zookeeper.persistence.enabled=false \
           --set replicaCount=1 \
-          --set persistence.enabled=true \
-          --set persistence.storageClass=ebs-sc \
-          --set persistence.size=10Gi \
-          --set zookeeper.persistence.enabled=true \
-          --set zookeeper.persistence.storageClass=ebs-sc \
-          --set zookeeper.persistence.size=5Gi \
           --set resources.requests.memory=512Mi \
           --set resources.requests.cpu=250m \
           --set zookeeper.resources.requests.memory=256Mi \
-          --set zookeeper.resources.requests.cpu=100m
+          --set zookeeper.resources.requests.cpu=100m \
+          --set zookeeper.enabled=true
         
     - name: Wait for Kafka to be ready
       run: |
         echo "Waiting for Kafka to be ready..."
-        kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=kafka,app.kubernetes.io/instance=my-release --timeout=300s
+        # Add some initial delay to give pods time to start
+        sleep 30
+        kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=kafka,app.kubernetes.io/instance=my-release --timeout=300s || true
         
     - name: Install Schema Registry
       run: |
@@ -171,6 +153,7 @@ jobs:
     - name: Wait for Schema Registry to be ready
       run: |
         echo "Waiting for Schema Registry to be ready..."
+        sleep 30
         kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=schema-registry,app.kubernetes.io/instance=schema --timeout=300s || true
         
     - name: Create Kafka topics
@@ -205,6 +188,7 @@ jobs:
     - name: Wait for Kafka topic creation
       run: |
         echo "Waiting for Kafka topics to be created..."
+        sleep 30
         kubectl wait --for=condition=complete job/kafka-topics-setup --timeout=300s || true
         
     - name: Deploy microservices
