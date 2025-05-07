@@ -35,8 +35,20 @@ const OrderForm = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Format price and subTotal fields to two decimal places
+    const formattedOrderData = {
+      ...orderData,
+      price: Number(orderData.price).toFixed(2),
+      items: orderData.items.map(item => ({
+        ...item,
+        price: Number(item.price).toFixed(2),
+        subTotal: Number(item.subTotal).toFixed(2),
+      }))
+    };
+
     try {
-      const response = await createOrder(orderData);
+      const response = await createOrder(formattedOrderData);
       alert('Order created successfully! Order ID: ' + response.orderTrackingId);
       console.log('Order created:', response);
     } catch (error) {
