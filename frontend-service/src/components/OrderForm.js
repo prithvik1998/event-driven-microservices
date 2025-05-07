@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { createOrder } from '../services/orderService';
+import { createOrder, getOrder } from '../services/orderService';
 
 const OrderForm = () => {
   const [orderData, setOrderData] = useState({
@@ -27,6 +27,9 @@ const OrderForm = () => {
     ]
   });
 
+  const [trackingId, setTrackingId] = useState('');
+  const [orderStatus, setOrderStatus] = useState(null);
+
   const handleItemChange = (index, field, value) => {
     const newItems = [...orderData.items];
     newItems[index][field] = field === 'quantity' || field === 'price' || field === 'subTotal' ? parseFloat(value) : value;
@@ -51,9 +54,19 @@ const OrderForm = () => {
       const response = await createOrder(formattedOrderData);
       alert('Order created successfully! Order ID: ' + response.orderTrackingId);
       console.log('Order created:', response);
+      setTrackingId(response.orderTrackingId);
     } catch (error) {
       alert('Order creation failed: ' + error.message);
       console.error('Order creation failed:', error);
+    }
+  };
+
+  const handleCheckStatus = async () => {
+    try {
+      const statusResponse = await getOrder(trackingId);
+      setOrderStatus(statusResponse);
+    } catch (error) {
+      alert('Failed to fetch order status: ' + error.message);
     }
   };
 
@@ -167,6 +180,19 @@ const OrderForm = () => {
         ))}
         <button type="submit">Create Order</button>
       </form>
+      {trackingId && (
+        <div>
+          <h3>Order Tracking</h3>
+          <p>Order Tracking ID: {trackingId}</p>
+          <button onClick={handleCheckStatus}>Check Order Status</button>
+          {orderStatus && (
+            <div>
+              <p>Status: {orderStatus.orderStatus}</p>
+              <p>Message: {orderStatus.message}</p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
