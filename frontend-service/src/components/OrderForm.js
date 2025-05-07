@@ -17,9 +17,21 @@ const OrderForm = () => {
         quantity: 1,
         price: 0,
         subTotal: 0
+      },
+      {
+        productId: '',
+        quantity: 1,
+        price: 0,
+        subTotal: 0
       }
     ]
   });
+
+  const handleItemChange = (index, field, value) => {
+    const newItems = [...orderData.items];
+    newItems[index][field] = field === 'quantity' || field === 'price' || field === 'subTotal' ? parseFloat(value) : value;
+    setOrderData({ ...orderData, items: newItems });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -100,6 +112,47 @@ const OrderForm = () => {
             required
           />
         </div>
+        <h3>Items</h3>
+        {orderData.items.map((item, idx) => (
+          <div key={idx} style={{border: '1px solid #ccc', marginBottom: '10px', padding: '10px'}}>
+            <div>
+              <label>Product ID:</label>
+              <input
+                type="text"
+                value={item.productId}
+                onChange={e => handleItemChange(idx, 'productId', e.target.value)}
+                required
+              />
+            </div>
+            <div>
+              <label>Quantity:</label>
+              <input
+                type="number"
+                value={item.quantity}
+                onChange={e => handleItemChange(idx, 'quantity', e.target.value)}
+                required
+              />
+            </div>
+            <div>
+              <label>Price:</label>
+              <input
+                type="number"
+                value={item.price}
+                onChange={e => handleItemChange(idx, 'price', e.target.value)}
+                required
+              />
+            </div>
+            <div>
+              <label>SubTotal:</label>
+              <input
+                type="number"
+                value={item.subTotal}
+                onChange={e => handleItemChange(idx, 'subTotal', e.target.value)}
+                required
+              />
+            </div>
+          </div>
+        ))}
         <button type="submit">Create Order</button>
       </form>
     </div>
