@@ -328,4 +328,4 @@ jobs:
         echo "Order service: http://$ORDER_ENDPOINT:8181"
         echo "Frontend service: http://$FRONTEND_ENDPOINT"
         
-        echo "Deployment complete!"
+        echo "Deployment complete"
