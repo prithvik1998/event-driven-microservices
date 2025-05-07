@@ -13,7 +13,11 @@ public class WebConfig {
             @Override
             public void addCorsMappings(CorsRegistry registry) {
                 registry.addMapping("/**")
-                        .allowedOrigins("http://localhost:3000", "http://localhost:8080", "https://your-frontend.cloud.url")
+                        .allowedOrigins(
+                            "http://localhost:3000",
+                            "http://localhost:8080",
+                            "http://a7d2e264d0561449581223106ac20650-43070287.us-east-1.elb.amazonaws.com"
+                        )
                         .allowedMethods("*");
             }
         };
