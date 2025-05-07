@@ -138,9 +138,9 @@ jobs:
                 - containerPort: 80
                 env:
                 - name: REACT_APP_CUSTOMER_API_URL
-                  value: "http://customer-service:8184"
+                  value: "http://abc47a48b20d243089058aef34696659-1816326668.us-east-1.elb.amazonaws.com:8184"
                 - name: REACT_APP_ORDER_API_URL
-                  value: "http://order-service:8181"
+                  value: "http://a666dd10fea464039b8cfacf6c27bb38-1881340992.us-east-1.elb.amazonaws.com:8181"
         ---
         apiVersion: v1
         kind: Service
