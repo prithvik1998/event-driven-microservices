@@ -134,14 +134,38 @@ jobs:
       run: |
         echo "Waiting for Kafka to be ready..."
         # Add some initial delay to give pods time to start
-        sleep 30
+        sleep 60
         kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=kafka,app.kubernetes.io/instance=my-release --timeout=300s || true
         
-    - name: Install Schema Registry
+        # Verify Kafka is accessible
+        echo "Verifying Kafka connectivity..."
+        kubectl run test-kafka-conn --image=bitnami/kafka:latest --rm -it --restart=Never -- \
+          kafka-topics.sh --bootstrap-server my-release-kafka:9092 --list || true
+        
+    - name: Install Schema Registry with correct Kafka address
       run: |
+        # Create a ConfigMap with a custom configuration for Schema Registry
+        cat <<EOF > schema-registry-config.yaml
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: schema-registry-config
+        data:
+          schema-registry.properties: |
+            kafkastore.bootstrap.servers=PLAINTEXT://my-release-kafka:9092
+            schema.registry.bootstrap.servers=PLAINTEXT://my-release-kafka:9092
+        EOF
+        kubectl apply -f schema-registry-config.yaml
+        
+        # Install Schema Registry with the correct configuration
         helm install schema bitnami/schema-registry \
-          --set kafka.bootstrapServers=my-release-kafka:9092 \
-          --set kafka.enabled=false
+          --set kafka.enabled=false \
+          --set externalKafka.brokers=my-release-kafka:9092 \
+          --set configurationOverrides."kafkastore\.bootstrap\.servers"=PLAINTEXT://my-release-kafka:9092 \
+          --set configurationOverrides."schema\.registry\.bootstrap\.servers"=PLAINTEXT://my-release-kafka:9092 \
+          --set configurationOverrides."listener"=http://0.0.0.0:8081 \
+          --set extraEnvVars[0].name=SCHEMA_REGISTRY_KAFKA_BROKERS \
+          --set extraEnvVars[0].value=PLAINTEXT://my-release-kafka:9092
           
     - name: Deploy Postgres
       run: kubectl apply -f ./infrastructure/k8s/postgres-deployment.yml
@@ -149,8 +173,14 @@ jobs:
     - name: Wait for Schema Registry to be ready
       run: |
         echo "Waiting for Schema Registry to be ready..."
-        sleep 30
+        sleep 60
         kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=schema-registry,app.kubernetes.io/instance=schema --timeout=300s || true
+        
+        # Check Schema Registry status and logs
+        echo "Schema Registry status:"
+        kubectl get pods | grep schema
+        echo "Schema Registry logs:"
+        kubectl logs $(kubectl get pods | grep schema | awk '{print $1}') || true
         
     - name: Create Kafka topics
       run: |
@@ -189,27 +219,30 @@ jobs:
         
     - name: Configure Schema Registry for Microservices
       run: |
+        # Make sure the Schema Registry URL is correct
+        SCHEMA_REGISTRY_URL=http://schema-schema-registry:8081
+        
         # Configure services to use Schema Registry
         kubectl set env deployment/customer-deployment \
           SPRING_KAFKA_PROPERTIES_VALUE_SERIALIZER=io.confluent.kafka.serializers.KafkaAvroSerializer \
-          SPRING_KAFKA_PROPERTIES_SCHEMA_REGISTRY_URL=http://schema-schema-registry:8081
+          SPRING_KAFKA_PROPERTIES_SCHEMA_REGISTRY_URL=$SCHEMA_REGISTRY_URL
         
         kubectl set env deployment/order-deployment \
           SPRING_KAFKA_PROPERTIES_VALUE_SERIALIZER=io.confluent.kafka.serializers.KafkaAvroSerializer \
           SPRING_KAFKA_PROPERTIES_VALUE_DESERIALIZER=io.confluent.kafka.serializers.KafkaAvroDeserializer \
-          SPRING_KAFKA_PROPERTIES_SCHEMA_REGISTRY_URL=http://schema-schema-registry:8081 \
+          SPRING_KAFKA_PROPERTIES_SCHEMA_REGISTRY_URL=$SCHEMA_REGISTRY_URL \
           SPRING_KAFKA_PROPERTIES_SPECIFIC_AVRO_READER=true
         
         kubectl set env deployment/payment-deployment \
           SPRING_KAFKA_PROPERTIES_VALUE_SERIALIZER=io.confluent.kafka.serializers.KafkaAvroSerializer \
           SPRING_KAFKA_PROPERTIES_VALUE_DESERIALIZER=io.confluent.kafka.serializers.KafkaAvroDeserializer \
-          SPRING_KAFKA_PROPERTIES_SCHEMA_REGISTRY_URL=http://schema-schema-registry:8081 \
+          SPRING_KAFKA_PROPERTIES_SCHEMA_REGISTRY_URL=$SCHEMA_REGISTRY_URL \
           SPRING_KAFKA_PROPERTIES_SPECIFIC_AVRO_READER=true
         
         kubectl set env deployment/restaurant-deployment \
           SPRING_KAFKA_PROPERTIES_VALUE_SERIALIZER=io.confluent.kafka.serializers.KafkaAvroSerializer \
           SPRING_KAFKA_PROPERTIES_VALUE_DESERIALIZER=io.confluent.kafka.serializers.KafkaAvroDeserializer \
-          SPRING_KAFKA_PROPERTIES_SCHEMA_REGISTRY_URL=http://schema-schema-registry:8081 \
+          SPRING_KAFKA_PROPERTIES_SCHEMA_REGISTRY_URL=$SCHEMA_REGISTRY_URL \
           SPRING_KAFKA_PROPERTIES_SPECIFIC_AVRO_READER=true
         
     - name: Deploy microservices
@@ -231,5 +264,14 @@ jobs:
         kubectl wait --for=condition=available deployment/order-deployment --timeout=300s || true
         kubectl wait --for=condition=available deployment/payment-deployment --timeout=300s || true
         kubectl wait --for=condition=available deployment/restaurant-deployment --timeout=300s || true
+        
+        echo "Testing the services..."
+        
+        # Get the customer service endpoint
+        CUSTOMER_ENDPOINT=$(kubectl get svc customer-service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+        ORDER_ENDPOINT=$(kubectl get svc order-service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+        
+        echo "Customer service: http://$CUSTOMER_ENDPOINT:8184"
+        echo "Order service: http://$ORDER_ENDPOINT:8181"
         
         echo "Deployment complete!"
