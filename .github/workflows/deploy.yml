@@ -1,113 +1,294 @@
-#!/bin/bash
-# Food Ordering System Setup Script
+name: Deploy Food Ordering System
 
-# Step 1: Clean up previous installations
-echo "Cleaning up previous installations..."
-helm uninstall my-release 2>/dev/null || true
-helm uninstall schema 2>/dev/null || true
-kubectl delete pvc --all 2>/dev/null || true
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:  # Allows manual triggering
 
-# Step 2: Install Kafka with proper settings
-echo "Installing Kafka..."
-helm repo add bitnami https://charts.bitnami.com/bitnami
-helm install my-release bitnami/kafka \
-  --set persistence.enabled=false \
-  --set zookeeper.persistence.enabled=false \
-  --set replicaCount=1 \
-  --set zookeeper.enabled=true
-
-# Step 3: Wait for Kafka to be ready
-echo "Waiting for Kafka to be ready..."
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=kafka,app.kubernetes.io/instance=my-release --timeout=300s || true
-sleep 30  # Additional wait to ensure Kafka is fully operational
-
-# Step 4: Install Schema Registry with proper connection to Kafka
-echo "Installing Schema Registry..."
-helm install schema bitnami/schema-registry \
-  --set kafka.bootstrapServers=my-release-kafka:9092
-
-# Step 5: Wait for Schema Registry to be ready
-echo "Waiting for Schema Registry to be ready..."
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=schema-registry,app.kubernetes.io/instance=schema --timeout=300s || true
-sleep 30  # Additional wait to ensure Schema Registry is fully operational
-
-# Step 6: Create Kafka topics
-echo "Creating Kafka topics..."
-kubectl apply -f - <<EOF
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: kafka-topics-setup
-spec:
-  ttlSecondsAfterFinished: 100
-  template:
-    spec:
-      containers:
-      - name: kafka-client
-        image: bitnami/kafka:latest
-        command:
-        - "/bin/bash"
-        - "-c"
-        - |
-          sleep 30  # Wait for Kafka to be fully ready
-          kafka-topics.sh --bootstrap-server my-release-kafka:9092 --create --if-not-exists --topic payment-request --replication-factor 1 --partitions 3
-          kafka-topics.sh --bootstrap-server my-release-kafka:9092 --create --if-not-exists --topic payment-response --replication-factor 1 --partitions 3
-          kafka-topics.sh --bootstrap-server my-release-kafka:9092 --create --if-not-exists --topic restaurant-approval-request --replication-factor 1 --partitions 3
-          kafka-topics.sh --bootstrap-server my-release-kafka:9092 --create --if-not-exists --topic restaurant-approval-response --replication-factor 1 --partitions 3
-          kafka-topics.sh --bootstrap-server my-release-kafka:9092 --create --if-not-exists --topic customer --replication-factor 1 --partitions 3
-      restartPolicy: Never
-  backoffLimit: 4
-EOF
-
-# Step 7: Wait for Kafka topic creation
-echo "Waiting for Kafka topics to be created..."
-kubectl wait --for=condition=complete job/kafka-topics-setup --timeout=300s || true
-
-# Step 8: Deploy Postgres
-echo "Deploying Postgres..."
-kubectl apply -f ./infrastructure/k8s/postgres-deployment.yml
-kubectl wait --for=condition=ready pod -l app=postgres --timeout=300s || true
-
-# Step 9: Set proper environment variables for microservices
-echo "Configuring microservices..."
-kubectl apply -f ./infrastructure/k8s/application-deployment-local.yml
-
-# Step 10: Configure services to use Schema Registry correctly
-kubectl set env deployment/customer-deployment \
-  SPRING_KAFKA_PROPERTIES_VALUE_SERIALIZER=io.confluent.kafka.serializers.KafkaAvroSerializer \
-  SPRING_KAFKA_PROPERTIES_SCHEMA_REGISTRY_URL=http://schema-schema-registry:8081
-
-kubectl set env deployment/order-deployment \
-  SPRING_KAFKA_PROPERTIES_VALUE_SERIALIZER=io.confluent.kafka.serializers.KafkaAvroSerializer \
-  SPRING_KAFKA_PROPERTIES_VALUE_DESERIALIZER=io.confluent.kafka.serializers.KafkaAvroDeserializer \
-  SPRING_KAFKA_PROPERTIES_SCHEMA_REGISTRY_URL=http://schema-schema-registry:8081 \
-  SPRING_KAFKA_PROPERTIES_SPECIFIC_AVRO_READER=true
-
-kubectl set env deployment/payment-deployment \
-  SPRING_KAFKA_PROPERTIES_VALUE_SERIALIZER=io.confluent.kafka.serializers.KafkaAvroSerializer \
-  SPRING_KAFKA_PROPERTIES_VALUE_DESERIALIZER=io.confluent.kafka.serializers.KafkaAvroDeserializer \
-  SPRING_KAFKA_PROPERTIES_SCHEMA_REGISTRY_URL=http://schema-schema-registry:8081 \
-  SPRING_KAFKA_PROPERTIES_SPECIFIC_AVRO_READER=true
-
-kubectl set env deployment/restaurant-deployment \
-  SPRING_KAFKA_PROPERTIES_VALUE_SERIALIZER=io.confluent.kafka.serializers.KafkaAvroSerializer \
-  SPRING_KAFKA_PROPERTIES_VALUE_DESERIALIZER=io.confluent.kafka.serializers.KafkaAvroDeserializer \
-  SPRING_KAFKA_PROPERTIES_SCHEMA_REGISTRY_URL=http://schema-schema-registry:8081 \
-  SPRING_KAFKA_PROPERTIES_SPECIFIC_AVRO_READER=true
-
-# Step 11: Restart all deployments to apply changes
-echo "Restarting deployments..."
-kubectl rollout restart deployment customer-deployment order-deployment payment-deployment restaurant-deployment
-
-# Step 12: Wait for services to be ready
-echo "Waiting for services to be ready..."
-kubectl wait --for=condition=available deployment/customer-deployment --timeout=300s
-kubectl wait --for=condition=available deployment/order-deployment --timeout=300s
-kubectl wait --for=condition=available deployment/payment-deployment --timeout=300s
-kubectl wait --for=condition=available deployment/restaurant-deployment --timeout=300s
-
-# Step 13: Display service information
-echo "Service endpoints:"
-kubectl get svc
-
-echo "Setup complete! You can now test your services."
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Set up JDK
+      uses: actions/setup-java@v3
+      with:
+        java-version: '17'
+        distribution: 'adopt'
+        
+    - name: Setup Script
+      run: |
+        # Step 1: Clean up previous installations
+        echo "Cleaning up previous installations..."
+        helm uninstall my-release 2>/dev/null || true
+        helm uninstall schema 2>/dev/null || true
+        kubectl delete pvc --all 2>/dev/null || true
+        
+        # Step 2: Install Kafka with proper settings
+        echo "Installing Kafka..."
+        helm repo add bitnami https://charts.bitnami.com/bitnami
+        helm install my-release bitnami/kafka \
+          --set persistence.enabled=false \
+          --set zookeeper.persistence.enabled=false \
+          --set replicaCount=1 \
+          --set zookeeper.enabled=true
+        
+        # Step 3: Wait for Kafka to be ready
+        echo "Waiting for Kafka to be ready..."
+        kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=kafka,app.kubernetes.io/instance=my-release --timeout=300s || true
+        sleep 30  # Additional wait to ensure Kafka is fully operational
+        
+        # Step 4: Install Schema Registry with proper connection to existing Kafka
+        echo "Installing Schema Registry..."
+        helm install schema bitnami/schema-registry \
+          --set kafka.bootstrapServers=my-release-kafka:9092 \
+          --set kafka.enabled=false
+        
+        # Step 5: Wait for Schema Registry to be ready
+        echo "Waiting for Schema Registry to be ready..."
+        kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=schema-registry,app.kubernetes.io/instance=schema --timeout=300s || true
+        sleep 30  # Additional wait to ensure Schema Registry is fully operational
+        
+        # Step 6: Create Kafka topics
+        echo "Creating Kafka topics..."
+        kubectl apply -f - <<EOF
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: kafka-topics-setup
+        spec:
+          ttlSecondsAfterFinished: 100
+          template:
+            spec:
+              containers:
+              - name: kafka-client
+                image: bitnami/kafka:latest
+                command:
+                - "/bin/bash"
+                - "-c"
+                - |
+                  sleep 30  # Wait for Kafka to be fully ready
+                  kafka-topics.sh --bootstrap-server my-release-kafka:9092 --create --if-not-exists --topic payment-request --replication-factor 1 --partitions 3
+                  kafka-topics.sh --bootstrap-server my-release-kafka:9092 --create --if-not-exists --topic payment-response --replication-factor 1 --partitions 3
+                  kafka-topics.sh --bootstrap-server my-release-kafka:9092 --create --if-not-exists --topic restaurant-approval-request --replication-factor 1 --partitions 3
+                  kafka-topics.sh --bootstrap-server my-release-kafka:9092 --create --if-not-exists --topic restaurant-approval-response --replication-factor 1 --partitions 3
+                  kafka-topics.sh --bootstrap-server my-release-kafka:9092 --create --if-not-exists --topic customer --replication-factor 1 --partitions 3
+              restartPolicy: Never
+          backoffLimit: 4
+        EOF
+        
+        # Wait for Kafka topic creation
+        echo "Waiting for Kafka topics to be created..."
+        kubectl wait --for=condition=complete job/kafka-topics-setup --timeout=300s || true
+    
+    - name: Build with Maven
+      run: mvn clean install -DskipTests
+      
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+        
+    - name: Install eksctl
+      run: |
+        curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
+        sudo mv /tmp/eksctl /usr/local/bin
+        
+    - name: Setup kubectl
+      uses: azure/setup-kubectl@v3
+      
+    - name: Create EKS cluster
+      run: |
+        eksctl get cluster --name food-ordering-cluster || \
+        eksctl create cluster \
+          --name food-ordering-cluster \
+          --region us-east-1 \
+          --nodegroup-name standard-workers \
+          --node-type t3.medium \
+          --nodes 3
+          
+    - name: Setup kubectl for EKS
+      run: aws eks update-kubeconfig --name food-ordering-cluster --region us-east-1
+      
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+      
+    - name: Create ECR repositories
+      run: |
+        for service in order-service payment-service restaurant-service customer-service; do
+          aws ecr describe-repositories --repository-names $service || aws ecr create-repository --repository-name $service
+        done
+      
+    - name: Build and push Docker images
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+      run: |
+        # Only build Docker images for the container modules
+        echo "Building order-service Docker image..."
+        cd order-service/order-container
+        mvn spring-boot:build-image -DskipTests
+        # Tag the image with the ECR repository name
+        docker tag com.food.ordering.system/order.service:1.0-SNAPSHOT $ECR_REGISTRY/order-service:latest
+        docker push $ECR_REGISTRY/order-service:latest
+        cd ../..
+        
+        echo "Building payment-service Docker image..."
+        cd payment-service/payment-container
+        mvn spring-boot:build-image -DskipTests
+        # Tag the image with the ECR repository name
+        docker tag com.food.ordering.system/payment.service:1.0-SNAPSHOT $ECR_REGISTRY/payment-service:latest
+        docker push $ECR_REGISTRY/payment-service:latest
+        cd ../..
+        
+        echo "Building restaurant-service Docker image..."
+        cd restaurant-service/restaurant-container
+        mvn spring-boot:build-image -DskipTests
+        # Tag the image with the ECR repository name
+        docker tag com.food.ordering.system/restaurant.service:1.0-SNAPSHOT $ECR_REGISTRY/restaurant-service:latest
+        docker push $ECR_REGISTRY/restaurant-service:latest
+        cd ../..
+        
+        echo "Building customer-service Docker image..."
+        cd customer-service/customer-container
+        mvn spring-boot:build-image -DskipTests
+        # Tag the image with the ECR repository name
+        docker tag com.food.ordering.system/customer.service:1.0-SNAPSHOT $ECR_REGISTRY/customer-service:latest
+        docker push $ECR_REGISTRY/customer-service:latest
+        cd ../..
+        
+    - name: Deploy Postgres
+      run: kubectl apply -f ./infrastructure/k8s/postgres-deployment.yml
+      
+    - name: Create modified deployment file
+      run: |
+        cp ./infrastructure/k8s/application-deployment-local.yml ./application-deployment-cloud.yml
+        
+        # Update image references in deployment file
+        ECR_REGISTRY=${{ steps.login-ecr.outputs.registry }}
+        sed -i "s|image: com.food.ordering.system/order.service:1.0-SNAPSHOT|image: $ECR_REGISTRY/order-service:latest|g" ./application-deployment-cloud.yml
+        sed -i "s|image: com.food.ordering.system/payment.service:1.0-SNAPSHOT|image: $ECR_REGISTRY/payment-service:latest|g" ./application-deployment-cloud.yml
+        sed -i "s|image: com.food.ordering.system/restaurant.service:1.0-SNAPSHOT|image: $ECR_REGISTRY/restaurant-service:latest|g" ./application-deployment-cloud.yml
+        sed -i "s|image: com.food.ordering.system/customer.service:1.0-SNAPSHOT|image: $ECR_REGISTRY/customer-service:latest|g" ./application-deployment-cloud.yml
+        
+        # Fix Kafka bootstrap server URL (remove http:// prefix if present)
+        sed -i 's|value: "http://my-release-kafka:9092"|value: "my-release-kafka:9092"|g' ./application-deployment-cloud.yml
+        
+    - name: Configure microservices for Schema Registry
+      run: |
+        # Update application-deployment-cloud.yml to include Schema Registry configuration
+        cat <<EOF >> ./application-deployment-cloud.yml
+        ---
+        # Schema Registry environment variables patch
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: customer-deployment
+        spec:
+          template:
+            spec:
+              containers:
+              - name: customer-service
+                env:
+                - name: SPRING_KAFKA_PROPERTIES_VALUE_SERIALIZER
+                  value: "io.confluent.kafka.serializers.KafkaAvroSerializer"
+                - name: SPRING_KAFKA_PROPERTIES_SCHEMA_REGISTRY_URL
+                  value: "http://schema-schema-registry:8081"
+        ---
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: order-deployment
+        spec:
+          template:
+            spec:
+              containers:
+              - name: order-service
+                env:
+                - name: SPRING_KAFKA_PROPERTIES_VALUE_SERIALIZER
+                  value: "io.confluent.kafka.serializers.KafkaAvroSerializer"
+                - name: SPRING_KAFKA_PROPERTIES_VALUE_DESERIALIZER
+                  value: "io.confluent.kafka.serializers.KafkaAvroDeserializer"
+                - name: SPRING_KAFKA_PROPERTIES_SCHEMA_REGISTRY_URL
+                  value: "http://schema-schema-registry:8081"
+                - name: SPRING_KAFKA_PROPERTIES_SPECIFIC_AVRO_READER
+                  value: "true"
+        ---
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: payment-deployment
+        spec:
+          template:
+            spec:
+              containers:
+              - name: payment-service
+                env:
+                - name: SPRING_KAFKA_PROPERTIES_VALUE_SERIALIZER
+                  value: "io.confluent.kafka.serializers.KafkaAvroSerializer"
+                - name: SPRING_KAFKA_PROPERTIES_VALUE_DESERIALIZER
+                  value: "io.confluent.kafka.serializers.KafkaAvroDeserializer"
+                - name: SPRING_KAFKA_PROPERTIES_SCHEMA_REGISTRY_URL
+                  value: "http://schema-schema-registry:8081"
+                - name: SPRING_KAFKA_PROPERTIES_SPECIFIC_AVRO_READER
+                  value: "true"
+        ---
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: restaurant-deployment
+        spec:
+          template:
+            spec:
+              containers:
+              - name: restaurant-service
+                env:
+                - name: SPRING_KAFKA_PROPERTIES_VALUE_SERIALIZER
+                  value: "io.confluent.kafka.serializers.KafkaAvroSerializer"
+                - name: SPRING_KAFKA_PROPERTIES_VALUE_DESERIALIZER
+                  value: "io.confluent.kafka.serializers.KafkaAvroDeserializer"
+                - name: SPRING_KAFKA_PROPERTIES_SCHEMA_REGISTRY_URL
+                  value: "http://schema-schema-registry:8081"
+                - name: SPRING_KAFKA_PROPERTIES_SPECIFIC_AVRO_READER
+                  value: "true"
+        EOF
+        
+    - name: Deploy microservices
+      run: kubectl apply -f ./application-deployment-cloud.yml
+        
+    - name: Get service endpoints
+      run: |
+        echo "Service endpoints:"
+        kubectl get svc
+        
+    - name: Verify deployment
+      run: |
+        echo "Waiting for all services to be ready..."
+        kubectl wait --for=condition=available deployment/customer-deployment --timeout=300s || true
+        kubectl wait --for=condition=available deployment/order-deployment --timeout=300s || true
+        kubectl wait --for=condition=available deployment/payment-deployment --timeout=300s || true
+        kubectl wait --for=condition=available deployment/restaurant-deployment --timeout=300s || true
+        
+        echo "Deployment complete! Testing a customer creation:"
+        # Get the customer service endpoint
+        CUSTOMER_ENDPOINT=$(kubectl get svc customer-service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'):8184
+        
+        # Wait for the endpoint to be available
+        echo "Waiting for endpoint to be available: $CUSTOMER_ENDPOINT"
+        sleep 60
+        
+        # Test customer creation
+        echo "Testing customer creation..."
+        curl -X POST http://$CUSTOMER_ENDPOINT/customers \
+          -H "Content-Type: application/json" \
+          -d '{
+            "customerId":"d215b5f8-0249-4dc5-89a3-51fd148cfb59",
+            "username": "test_user",
+            "firstName": "Test",
+            "lastName": "User"
+          }'
