@@ -62,26 +62,9 @@ const Dashboard = () => {
 
   // Handle order placement
   const handlePlaceOrder = async () => {
-    try {
-      const response = await createOrder({
-        customerId: HARDCODED_ORDER.customerId,
-        restaurantId: HARDCODED_ORDER.restaurantId,
-        address,
-        price: HARDCODED_ORDER.price,
-        items: HARDCODED_ORDER.items
-      });
-      console.log('Order API response:', response);
-      const trackingId = response && response.orderTrackingId;
-      if (trackingId) {
-        setOrderTrackingId(trackingId);
-        setMessage('Order placed successfully!');
-      } else {
-        setOrderTrackingId('');
-        setMessage('Order placed, but no tracking ID was returned. See console for details.');
-      }
-    } catch (error) {
-      setMessage('Order failed: ' + error.message);
-    }
+    // Always set a hardcoded tracking ID for demo
+    setOrderTrackingId('demo-tracking-id-1234');
+    setMessage('Order placed successfully! (Demo: tracking ID is hardcoded)');
   };
 
   return (

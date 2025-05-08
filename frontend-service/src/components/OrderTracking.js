@@ -8,7 +8,7 @@ const OrderTracking = () => {
   const [message, setMessage] = useState('');
 
   const handleCheckStatus = async () => {
-    // Hardcode the order status to 'APPROVED' for demo
+    // Always show status APPROVED for demo
     setOrderStatus({ orderStatus: 'APPROVED', message: 'Order has been approved (demo).' });
     setMessage('');
   };
