@@ -32,8 +32,14 @@ const Dashboard = () => {
         price,
         items
       });
-      setOrderTrackingId(response.orderTrackingId);
-      setMessage('Order placed successfully!');
+      console.log('Order API response:', response);
+      if (response && response.orderTrackingId) {
+        setOrderTrackingId(response.orderTrackingId);
+        setMessage('Order placed successfully!');
+      } else {
+        setOrderTrackingId('');
+        setMessage('Order placed, but no tracking ID was returned.');
+      }
     } catch (error) {
       setMessage('Order failed: ' + error.message);
     }
