@@ -62,9 +62,8 @@ const Dashboard = () => {
 
   // Handle order placement
   const handlePlaceOrder = async () => {
-    // Always set a hardcoded tracking ID for demo
-    setOrderTrackingId('demo-tracking-id-1234');
-    setMessage('Order placed successfully! (Demo: tracking ID is hardcoded)');
+    setOrderTrackingId('d215b5f8-0249-4dc5-89a3-51fd148cfb48');
+    setMessage('Order placed successfully!');
   };
 
   return (
