@@ -56,7 +56,7 @@ jobs:
       
     - name: Create ECR repositories
       run: |
-        for service in order-service payment-service restaurant-service customer-service; do
+        for service in order-service payment-service restaurant-service customer-service frontend-service; do
           aws ecr describe-repositories --repository-names $service || aws ecr create-repository --repository-name $service
         done
       
@@ -93,6 +93,13 @@ jobs:
         docker push $ECR_REGISTRY/customer-service:latest
         cd ../..
         
+        echo "Building frontend Docker image..."
+        cd frontend-service
+        docker build -t frontend-service:latest .
+        docker tag frontend-service:latest $ECR_REGISTRY/frontend-service:latest
+        docker push $ECR_REGISTRY/frontend-service:latest
+        cd ..
+        
     - name: Create modified deployment file
       run: |
         cp ./infrastructure/k8s/application-deployment-local.yml ./application-deployment-cloud.yml
@@ -106,6 +113,47 @@ jobs:
         
         # Fix Kafka bootstrap server URL (remove http:// prefix if present)
         sed -i 's|value: "http://my-release-kafka:9092"|value: "my-release-kafka:9092"|g' ./application-deployment-cloud.yml
+        
+    - name: Create frontend deployment file
+      run: |
+        cat <<EOF > ./infrastructure/k8s/frontend-deployment.yml
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: frontend-deployment
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: frontend
+          template:
+            metadata:
+              labels:
+                app: frontend
+            spec:
+              containers:
+              - name: frontend
+                image: ${{ steps.login-ecr.outputs.registry }}/frontend-service:latest
+                ports:
+                - containerPort: 80
+                env:
+                - name: REACT_APP_CUSTOMER_API_URL
+                  value: "http://abc47a48b20d243089058aef34696659-1816326668.us-east-1.elb.amazonaws.com:8184"
+                - name: REACT_APP_ORDER_API_URL
+                  value: "http://a666dd10fea464039b8cfacf6c27bb38-1881340992.us-east-1.elb.amazonaws.com:8181"
+        ---
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: frontend-service
+        spec:
+          type: LoadBalancer
+          ports:
+            - port: 80
+              targetPort: 80
+          selector:
+            app: frontend
+        EOF
         
     - name: Setup Helm
       uses: azure/setup-helm@v3
@@ -248,6 +296,9 @@ jobs:
     - name: Deploy microservices
       run: kubectl apply -f ./application-deployment-cloud.yml
         
+    - name: Deploy frontend
+      run: kubectl apply -f ./infrastructure/k8s/frontend-deployment.yml
+        
     - name: Get service endpoints
       run: |
         echo "Service endpoints:"
@@ -255,7 +306,7 @@ jobs:
         
     - name: Restart deployments to apply changes
       run: |
-        kubectl rollout restart deployment customer-deployment order-deployment payment-deployment restaurant-deployment
+        kubectl rollout restart deployment customer-deployment order-deployment payment-deployment restaurant-deployment frontend-deployment
         
     - name: Wait for services to be ready
       run: |
@@ -264,14 +315,17 @@ jobs:
         kubectl wait --for=condition=available deployment/order-deployment --timeout=300s || true
         kubectl wait --for=condition=available deployment/payment-deployment --timeout=300s || true
         kubectl wait --for=condition=available deployment/restaurant-deployment --timeout=300s || true
+        kubectl wait --for=condition=available deployment/frontend-deployment --timeout=300s || true
         
         echo "Testing the services..."
         
-        # Get the customer service endpoint
+        # Get the service endpoints
         CUSTOMER_ENDPOINT=$(kubectl get svc customer-service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
         ORDER_ENDPOINT=$(kubectl get svc order-service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+        FRONTEND_ENDPOINT=$(kubectl get svc frontend-service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
         
         echo "Customer service: http://$CUSTOMER_ENDPOINT:8184"
         echo "Order service: http://$ORDER_ENDPOINT:8181"
+        echo "Frontend service: http://$FRONTEND_ENDPOINT"
         
-        echo "Deployment complete!"
+        echo "Deployment complete"
