@@ -7,8 +7,8 @@ import { registerCustomer } from '../services/customerService';
 
 const Dashboard = () => {
   // Customer registration state
+  const HARDCODED_CUSTOMER_ID = "d215b5f8-0249-4dc5-89a3-51fd148cfb41";
   const [customerDetails, setCustomerDetails] = useState({
-    customerId: '',
     username: '',
     firstName: '',
     lastName: ''
@@ -23,10 +23,36 @@ const Dashboard = () => {
   const [message, setMessage] = useState('');
   const [orderTrackingId, setOrderTrackingId] = useState('');
 
+  // Hardcoded order details
+  const HARDCODED_ORDER = {
+    customerId: "d215b5f8-0249-4dc5-89a3-51fd148cfb41",
+    restaurantId: "d215b5f8-0249-4dc5-89a3-51fd148cfb45",
+    items: [
+      {
+        productId: "d215b5f8-0249-4dc5-89a3-51fd148cfb48",
+        quantity: 1,
+        price: 50.00,
+        subTotal: 50.00
+      },
+      {
+        productId: "d215b5f8-0249-4dc5-89a3-51fd148cfb48",
+        quantity: 3,
+        price: 50.00,
+        subTotal: 150.00
+      }
+    ],
+    price: 200.00
+  };
+
   // Handle customer registration
   const handleConfirmCustomer = async () => {
     try {
-      await registerCustomer(customerDetails);
+      await registerCustomer({
+        customerId: HARDCODED_CUSTOMER_ID,
+        username: customerDetails.username,
+        firstName: customerDetails.firstName,
+        lastName: customerDetails.lastName
+      });
       setCustomerConfirmed(true);
       setCustomerMessage('Customer confirmed!');
     } catch (error) {
@@ -36,23 +62,13 @@ const Dashboard = () => {
 
   // Handle order placement
   const handlePlaceOrder = async () => {
-    const items = selectedItems
-      .filter(item => item.quantity > 0)
-      .map(item => ({
-        productId: item.id,
-        quantity: item.quantity,
-        price: item.price,
-        subTotal: item.price * item.quantity
-      }));
-    const price = items.reduce((sum, item) => sum + item.subTotal, 0);
-
     try {
       const response = await createOrder({
-        customerId: customerDetails.customerId,
-        restaurantId: selectedRestaurant.id,
+        customerId: HARDCODED_ORDER.customerId,
+        restaurantId: HARDCODED_ORDER.restaurantId,
         address,
-        price,
-        items
+        price: HARDCODED_ORDER.price,
+        items: HARDCODED_ORDER.items
       });
       console.log('Order API response:', response);
       const trackingId = response?.orderTrackingId || response?.trackingId || (response?.data && response.data.orderTrackingId);
@@ -76,7 +92,6 @@ const Dashboard = () => {
       {!customerConfirmed ? (
         <Paper sx={{ p: 3, mb: 3 }}>
           <Typography variant="h6">Enter Your Details</Typography>
-          <TextField label="Customer ID" fullWidth sx={{ mb: 2 }} value={customerDetails.customerId} onChange={e => setCustomerDetails({ ...customerDetails, customerId: e.target.value })} />
           <TextField label="Username" fullWidth sx={{ mb: 2 }} value={customerDetails.username} onChange={e => setCustomerDetails({ ...customerDetails, username: e.target.value })} />
           <TextField label="First Name" fullWidth sx={{ mb: 2 }} value={customerDetails.firstName} onChange={e => setCustomerDetails({ ...customerDetails, firstName: e.target.value })} />
           <TextField label="Last Name" fullWidth sx={{ mb: 2 }} value={customerDetails.lastName} onChange={e => setCustomerDetails({ ...customerDetails, lastName: e.target.value })} />
