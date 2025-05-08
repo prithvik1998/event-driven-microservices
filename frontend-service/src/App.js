@@ -1,7 +1,6 @@
 import React from 'react';
 import { Container, CssBaseline, Box, Typography, AppBar, Toolbar, Tabs, Tab } from '@mui/material';
 import Dashboard from './components/Dashboard';
-import OrderForm from './components/OrderForm';
 import OrderTracking from './components/OrderTracking';
 
 function App() {
@@ -17,15 +16,13 @@ function App() {
           </Typography>
           <Tabs value={tab} onChange={(_, v) => setTab(v)} textColor="inherit" indicatorColor="secondary">
             <Tab label="Dashboard" />
-            <Tab label="Create Order" />
             <Tab label="Track Order" />
           </Tabs>
         </Toolbar>
       </AppBar>
       <Container maxWidth="md" sx={{ mt: 4 }}>
         {tab === 0 && <Dashboard />}
-        {tab === 1 && <OrderForm />}
-        {tab === 2 && <OrderTracking />}
+        {tab === 1 && <OrderTracking />}
       </Container>
     </>
   );
