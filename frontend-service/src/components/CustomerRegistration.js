@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { registerCustomer } from '../services/customerService';
+import { TextField, Button, Paper, Typography, Grid } from '@mui/material';
 
 const CustomerRegistration = () => {
   const [formData, setFormData] = useState({
@@ -8,62 +9,40 @@ const CustomerRegistration = () => {
     firstName: '',
     lastName: ''
   });
+  const [message, setMessage] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await registerCustomer(formData);
-      alert('Customer registered successfully!');
-      console.log('Customer registered:', response);
+      await registerCustomer(formData);
+      setMessage('Customer registered successfully!');
     } catch (error) {
-      alert('Registration failed: ' + error.message);
-      console.error('Registration failed:', error);
+      setMessage('Registration failed: ' + error.message);
     }
   };
 
   return (
-    <div className="registration-form">
-      <h2>Customer Registration</h2>
+    <Paper sx={{ p: 3, mb: 3 }}>
+      <Typography variant="h6" gutterBottom>Customer Registration</Typography>
       <form onSubmit={handleSubmit}>
-        <div>
-          <label>Customer ID:</label>
-          <input
-            type="text"
-            value={formData.customerId}
-            onChange={(e) => setFormData({...formData, customerId: e.target.value})}
-            required
-          />
-        </div>
-        <div>
-          <label>Username:</label>
-          <input
-            type="text"
-            value={formData.username}
-            onChange={(e) => setFormData({...formData, username: e.target.value})}
-            required
-          />
-        </div>
-        <div>
-          <label>First Name:</label>
-          <input
-            type="text"
-            value={formData.firstName}
-            onChange={(e) => setFormData({...formData, firstName: e.target.value})}
-            required
-          />
-        </div>
-        <div>
-          <label>Last Name:</label>
-          <input
-            type="text"
-            value={formData.lastName}
-            onChange={(e) => setFormData({...formData, lastName: e.target.value})}
-            required
-          />
-        </div>
-        <button type="submit">Register</button>
+        <Grid container spacing={2}>
+          <Grid item xs={12} sm={6}>
+            <TextField label="Customer ID" fullWidth required value={formData.customerId} onChange={e => setFormData({ ...formData, customerId: e.target.value })} />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField label="Username" fullWidth required value={formData.username} onChange={e => setFormData({ ...formData, username: e.target.value })} />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField label="First Name" fullWidth required value={formData.firstName} onChange={e => setFormData({ ...formData, firstName: e.target.value })} />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField label="Last Name" fullWidth required value={formData.lastName} onChange={e => setFormData({ ...formData, lastName: e.target.value })} />
+          </Grid>
+        </Grid>
+        <Button type="submit" variant="contained" sx={{ mt: 2 }}>Register</Button>
       </form>
-    </div>
+      {message && <Typography sx={{ mt: 2 }}>{message}</Typography>}
+    </Paper>
   );
 };
 
