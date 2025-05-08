@@ -1,18 +1,40 @@
 import React, { useState } from 'react';
-import { Box, Typography, Card, CardContent, Button, TextField, Divider, Paper } from '@mui/material';
+import { Box, Typography, Button, TextField, Divider, Paper } from '@mui/material';
 import RestaurantList from './RestaurantList';
 import MenuSelection from './MenuSelection';
 import { createOrder } from '../services/orderService';
-
-const DEFAULT_CUSTOMER_ID = "d215b5f8-0249-4dc5-89a3-51fd148cfb41";
+import { registerCustomer } from '../services/customerService';
 
 const Dashboard = () => {
+  // Customer registration state
+  const [customerDetails, setCustomerDetails] = useState({
+    customerId: '',
+    username: '',
+    firstName: '',
+    lastName: ''
+  });
+  const [customerConfirmed, setCustomerConfirmed] = useState(false);
+  const [customerMessage, setCustomerMessage] = useState('');
+
+  // Order state
   const [selectedRestaurant, setSelectedRestaurant] = useState(null);
   const [selectedItems, setSelectedItems] = useState([]);
   const [address, setAddress] = useState({ street: '', postalCode: '', city: '' });
   const [message, setMessage] = useState('');
   const [orderTrackingId, setOrderTrackingId] = useState('');
 
+  // Handle customer registration
+  const handleConfirmCustomer = async () => {
+    try {
+      await registerCustomer(customerDetails);
+      setCustomerConfirmed(true);
+      setCustomerMessage('Customer confirmed!');
+    } catch (error) {
+      setCustomerMessage('Customer registration failed: ' + error.message);
+    }
+  };
+
+  // Handle order placement
   const handlePlaceOrder = async () => {
     const items = selectedItems
       .filter(item => item.quantity > 0)
@@ -26,19 +48,20 @@ const Dashboard = () => {
 
     try {
       const response = await createOrder({
-        customerId: DEFAULT_CUSTOMER_ID,
+        customerId: customerDetails.customerId,
         restaurantId: selectedRestaurant.id,
         address,
         price,
         items
       });
       console.log('Order API response:', response);
-      if (response && response.orderTrackingId) {
-        setOrderTrackingId(response.orderTrackingId);
+      const trackingId = response?.orderTrackingId || response?.trackingId || (response?.data && response.data.orderTrackingId);
+      if (trackingId) {
+        setOrderTrackingId(trackingId);
         setMessage('Order placed successfully!');
       } else {
         setOrderTrackingId('');
-        setMessage('Order placed, but no tracking ID was returned.');
+        setMessage('Order placed, but no tracking ID was returned. See console for details.');
       }
     } catch (error) {
       setMessage('Order failed: ' + error.message);
@@ -50,7 +73,17 @@ const Dashboard = () => {
       <Box sx={{ backgroundColor: 'red', color: 'white', p: 2, mb: 2, borderRadius: 2, textAlign: 'center', fontWeight: 'bold', fontSize: 24 }}>
         FOOD ORDERING SYSTEM DEMO
       </Box>
-      {!selectedRestaurant ? (
+      {!customerConfirmed ? (
+        <Paper sx={{ p: 3, mb: 3 }}>
+          <Typography variant="h6">Enter Your Details</Typography>
+          <TextField label="Customer ID" fullWidth sx={{ mb: 2 }} value={customerDetails.customerId} onChange={e => setCustomerDetails({ ...customerDetails, customerId: e.target.value })} />
+          <TextField label="Username" fullWidth sx={{ mb: 2 }} value={customerDetails.username} onChange={e => setCustomerDetails({ ...customerDetails, username: e.target.value })} />
+          <TextField label="First Name" fullWidth sx={{ mb: 2 }} value={customerDetails.firstName} onChange={e => setCustomerDetails({ ...customerDetails, firstName: e.target.value })} />
+          <TextField label="Last Name" fullWidth sx={{ mb: 2 }} value={customerDetails.lastName} onChange={e => setCustomerDetails({ ...customerDetails, lastName: e.target.value })} />
+          <Button variant="contained" onClick={handleConfirmCustomer}>Confirm Your Details</Button>
+          {customerMessage && <Typography sx={{ mt: 2 }}>{customerMessage}</Typography>}
+        </Paper>
+      ) : !selectedRestaurant ? (
         <>
           <Typography variant="h5" sx={{ mb: 2 }}>Select a Restaurant</Typography>
           <RestaurantList onSelect={setSelectedRestaurant} />
