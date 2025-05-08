@@ -84,11 +84,6 @@ const Dashboard = () => {
     }
   };
 
-  // Hardcode a random tracking ID for demo purposes
-  const randomTrackingId = Math.random().toString(36).substring(2, 10) + '-' + Math.random().toString(36).substring(2, 10);
-  setOrderTrackingId(randomTrackingId);
-  setMessage('Order placed successfully! (Demo: tracking ID is hardcoded)');
-
   return (
     <Box>
       <Box sx={{ backgroundColor: 'red', color: 'white', p: 2, mb: 2, borderRadius: 2, textAlign: 'center', fontWeight: 'bold', fontSize: 24 }}>
