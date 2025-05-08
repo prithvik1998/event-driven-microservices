@@ -1,32 +1,36 @@
 import React, { useState } from 'react';
 import { createOrder } from '../services/orderService';
-import { TextField, Button, Box, Typography, Grid, Paper } from '@mui/material';
-
-const defaultItem = { productId: '', quantity: 1, price: 0, subTotal: 0 };
+import { TextField, Button, Box, Typography, Paper, Divider } from '@mui/material';
+import RestaurantList from './RestaurantList';
+import MenuSelection from './MenuSelection';
 
 const OrderForm = () => {
-  const [orderData, setOrderData] = useState({
-    customerId: '',
-    restaurantId: '',
-    address: { street: '', postalCode: '', city: '' },
-    price: 0,
-    items: [ { ...defaultItem } ]
-  });
-  const [trackingId, setTrackingId] = useState('');
+  const [customerId, setCustomerId] = useState('');
+  const [selectedRestaurant, setSelectedRestaurant] = useState(null);
+  const [selectedItems, setSelectedItems] = useState([]);
+  const [address, setAddress] = useState({ street: '', postalCode: '', city: '' });
   const [message, setMessage] = useState('');
+  const [trackingId, setTrackingId] = useState('');
 
-  const handleItemChange = (idx, field, value) => {
-    const items = [...orderData.items];
-    items[idx][field] = field === 'quantity' || field === 'price' || field === 'subTotal' ? parseFloat(value) : value;
-    setOrderData({ ...orderData, items });
-  };
-
-  const addItem = () => setOrderData({ ...orderData, items: [ ...orderData.items, { ...defaultItem } ] });
-
-  const handleSubmit = async (e) => {
+  const handleOrder = async (e) => {
     e.preventDefault();
+    const items = selectedItems
+      .filter(item => item.quantity > 0)
+      .map(item => ({
+        productId: item.id,
+        quantity: item.quantity,
+        price: item.price,
+        subTotal: item.price * item.quantity
+      }));
+    const price = items.reduce((sum, item) => sum + item.subTotal, 0);
     try {
-      const response = await createOrder(orderData);
+      const response = await createOrder({
+        customerId,
+        restaurantId: selectedRestaurant.id,
+        address,
+        price,
+        items
+      });
       setTrackingId(response.orderTrackingId);
       setMessage('Order created successfully!');
     } catch (error) {
@@ -37,29 +41,30 @@ const OrderForm = () => {
   return (
     <Paper sx={{ p: 3 }}>
       <Typography variant="h6" gutterBottom>Create Order</Typography>
-      <form onSubmit={handleSubmit}>
-        <Grid container spacing={2}>
-          <Grid item xs={6}><TextField label="Customer ID" fullWidth required value={orderData.customerId} onChange={e => setOrderData({ ...orderData, customerId: e.target.value })} /></Grid>
-          <Grid item xs={6}><TextField label="Restaurant ID" fullWidth required value={orderData.restaurantId} onChange={e => setOrderData({ ...orderData, restaurantId: e.target.value })} /></Grid>
-          <Grid item xs={4}><TextField label="Street" fullWidth required value={orderData.address.street} onChange={e => setOrderData({ ...orderData, address: { ...orderData.address, street: e.target.value } })} /></Grid>
-          <Grid item xs={4}><TextField label="Postal Code" fullWidth required value={orderData.address.postalCode} onChange={e => setOrderData({ ...orderData, address: { ...orderData.address, postalCode: e.target.value } })} /></Grid>
-          <Grid item xs={4}><TextField label="City" fullWidth required value={orderData.address.city} onChange={e => setOrderData({ ...orderData, address: { ...orderData.address, city: e.target.value } })} /></Grid>
-          <Grid item xs={12}><TextField label="Total Price" fullWidth required type="number" value={orderData.price} onChange={e => setOrderData({ ...orderData, price: parseFloat(e.target.value) })} /></Grid>
-        </Grid>
-        <Typography variant="subtitle1" sx={{ mt: 2 }}>Items</Typography>
-        {orderData.items.map((item, idx) => (
-          <Grid container spacing={2} key={idx} sx={{ mb: 1 }}>
-            <Grid item xs={3}><TextField label="Product ID" fullWidth required value={item.productId} onChange={e => handleItemChange(idx, 'productId', e.target.value)} /></Grid>
-            <Grid item xs={3}><TextField label="Quantity" fullWidth required type="number" value={item.quantity} onChange={e => handleItemChange(idx, 'quantity', e.target.value)} /></Grid>
-            <Grid item xs={3}><TextField label="Price" fullWidth required type="number" value={item.price} onChange={e => handleItemChange(idx, 'price', e.target.value)} /></Grid>
-            <Grid item xs={3}><TextField label="SubTotal" fullWidth required type="number" value={item.subTotal} onChange={e => handleItemChange(idx, 'subTotal', e.target.value)} /></Grid>
-          </Grid>
-        ))}
-        <Button onClick={addItem} sx={{ mb: 2 }}>Add Item</Button>
-        <Box>
-          <Button type="submit" variant="contained">Create Order</Button>
+      {!customerId ? (
+        <Box sx={{ mb: 2 }}>
+          <TextField label="Customer ID" fullWidth required value={customerId} onChange={e => setCustomerId(e.target.value)} />
         </Box>
-      </form>
+      ) : !selectedRestaurant ? (
+        <>
+          <Typography variant="subtitle1" sx={{ mb: 2 }}>Select a Restaurant</Typography>
+          <RestaurantList onSelect={setSelectedRestaurant} />
+        </>
+      ) : (
+        <form onSubmit={handleOrder}>
+          <Typography variant="subtitle1">Selected Restaurant: {selectedRestaurant.name}</Typography>
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle1">Delivery Address</Typography>
+          <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+            <TextField label="Street" required value={address.street} onChange={e => setAddress({ ...address, street: e.target.value })} />
+            <TextField label="Postal Code" required value={address.postalCode} onChange={e => setAddress({ ...address, postalCode: e.target.value })} />
+            <TextField label="City" required value={address.city} onChange={e => setAddress({ ...address, city: e.target.value })} />
+          </Box>
+          <Typography variant="subtitle1" sx={{ mb: 1 }}>Select Menu Items</Typography>
+          <MenuSelection menu={selectedRestaurant.menu} selectedItems={selectedItems} setSelectedItems={setSelectedItems} />
+          <Button type="submit" variant="contained" sx={{ mt: 3 }}>Place Order</Button>
+        </form>
+      )}
       {message && <Typography sx={{ mt: 2 }}>{message}</Typography>}
       {trackingId && <Typography sx={{ mt: 2 }}>Order Tracking ID: {trackingId}</Typography>}
     </Paper>
