@@ -71,7 +71,7 @@ const Dashboard = () => {
         items: HARDCODED_ORDER.items
       });
       console.log('Order API response:', response);
-      const trackingId = response?.orderTrackingId || response?.trackingId || (response?.data && response.data.orderTrackingId);
+      const trackingId = response && response.orderTrackingId;
       if (trackingId) {
         setOrderTrackingId(trackingId);
         setMessage('Order placed successfully!');
