@@ -3,6 +3,8 @@ import { Container, CssBaseline, Box, Typography, AppBar, Toolbar, Tabs, Tab } f
 import Dashboard from './components/Dashboard';
 import OrderTracking from './components/OrderTracking';
 
+const ORDER_API_URL = process.env.REACT_APP_ORDER_API_URL || "http://your-public-order-api:8181";
+
 function App() {
   const [tab, setTab] = React.useState(0);
 
