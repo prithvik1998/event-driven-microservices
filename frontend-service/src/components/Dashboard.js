@@ -62,7 +62,14 @@ const Dashboard = () => {
           </Box>
           <Button variant="contained" onClick={handlePlaceOrder}>Place Order</Button>
           {message && <Typography sx={{ mt: 2 }}>{message}</Typography>}
-          {orderTrackingId && <Typography sx={{ mt: 2 }}>Order Tracking ID: {orderTrackingId}</Typography>}
+          {orderTrackingId && (
+            <Box sx={{ mt: 2 }}>
+              <Typography color="primary">Order Tracking ID: <b>{orderTrackingId}</b></Typography>
+              <Typography variant="body2" sx={{ mt: 1 }}>
+                Copy this tracking ID and use it in the Track Order tab to check your order status.
+              </Typography>
+            </Box>
+          )}
           <Button sx={{ mt: 2 }} onClick={() => { setSelectedRestaurant(null); setSelectedItems([]); setMessage(''); setOrderTrackingId(''); }}>
             Back to Restaurants
           </Button>
